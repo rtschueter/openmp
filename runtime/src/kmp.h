@@ -305,6 +305,9 @@ typedef enum kmp_sched {
 #if KMP_STATIC_STEAL_ENABLED
   kmp_sched_static_steal = 102, // mapped to kmp_sch_static_steal (44)
 #endif
+
+  /* Add new scheduling strategies here if they should be accessible via OMP_SCHEDULE environment variable*/
+
   kmp_sched_upper,
   kmp_sched_default = kmp_sched_static // default scheduling
 } kmp_sched_t;
@@ -339,6 +342,9 @@ enum sched_type : kmp_int32 {
   kmp_sch_guided_simd = 46, /**< guided with chunk adjustment */
   kmp_sch_runtime_simd = 47, /**< runtime with chunk adjustment */
 #endif
+
+  /* Add new scheduling strategies */
+  kmp_sch_factoring = 48, /**< factoring */
 
   /* accessible only through KMP_SCHEDULE environment variable */
   kmp_sch_upper, /**< upper bound for unordered values */

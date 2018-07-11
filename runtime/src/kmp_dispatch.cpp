@@ -35,6 +35,8 @@
 #include <float.h>
 #endif
 
+#include <math.h>
+
 #if OMPT_SUPPORT
 #include "ompt-specific.h"
 #endif
@@ -133,8 +135,9 @@ template <typename UT> struct dispatch_shared_infoXX_template {
   volatile UT iteration;
   volatile UT num_done;
   volatile UT ordered_iteration;
+  volatile UT factoring_counter;
   // to retain the structure size making ordered_iteration scalar
-  UT ordered_dummy[KMP_MAX_ORDERED - 3];
+  UT ordered_dummy[KMP_MAX_ORDERED - 4];
 };
 
 // replaces dispatch_shared_info structure and dispatch_shared_info_t type
@@ -841,6 +844,30 @@ __kmp_dispatch_init(ident_t *loc, int gtid, enum sched_type schedule, T lb,
     /* FALL-THROUGH to static balanced */
   } // case
 #endif
+  /* Add new scheduling strategies */
+  case kmp_sch_factoring: {
+    T nproc = th->th.th_team_nproc;
+    KD_TRACE(100, ("__kmp_dispatch_init: T#%d kmp_sch_factoring"
+                   " case\n",
+                   gtid));
+
+    if (nproc > 1) {
+      /* parm1: store tc (aka N, number of iterations) */
+      pr->u.p.parm1 = tc;
+      /* parm2: store number of threads */
+      pr->u.p.parm2 = nproc;
+    } else {
+      KD_TRACE(100, ("__kmp_dispatch_init: T#%d falling-through to "
+                     "kmp_sch_static_greedy\n",
+                     gtid));
+      schedule = kmp_sch_static_greedy;
+      /* team->t.t_nproc == 1: fall-through to kmp_sch_static_greedy */
+      KD_TRACE(100, ("__kmp_dispatch_init: T#%d kmp_sch_static_greedy case\n",
+                     gtid));
+      pr->u.p.parm1 = tc;
+    } // if
+    break;
+  } // case
   case kmp_sch_static_balanced: {
     T nproc = th->th.th_team_nproc;
     T init, limit;
@@ -1183,6 +1210,10 @@ __kmp_dispatch_init(ident_t *loc, int gtid, enum sched_type schedule, T lb,
       case kmp_sch_guided_analytical_chunked:
       case kmp_sch_guided_simd:
         schedtype = 2;
+        break;
+      /* Add new scheduling strategy */
+      case kmp_sch_factoring:
+        schedtype = 3;
         break;
       default:
         // Should we put this case under "static"?
@@ -2291,6 +2322,73 @@ static int __kmp_dispatch_next(ident_t *loc, int gtid, kmp_int32 *p_last,
         } // if
       } // case
       break;
+
+      /* Add new scheduling strategies */
+      case kmp_sch_factoring: {
+        /* pr->u.p.parm1: store tc (aka N, number of iterations) */
+        /* pr->u.p.parm2: store number of threads */
+
+        // Factoring: calculate chunk size in i-th batch, this chunk size is scheduled N times
+
+        // chunk counter, chunk_counter/nthreads = batch number i
+        UT chunk_counter;
+
+        // chunk size in i-th batch
+        UT chunk_size;
+
+        KD_TRACE(
+            100,
+            ("__kmp_dispatch_next: T#%d kmp_sch_factoring case\n", gtid));
+
+        // trip -> N ... number of iterations
+        trip = pr->u.p.tc;
+
+        // Get stride
+        incr = pr->u.p.st;
+
+        // atomic operation, needed to determine chunk number for this scheduling operation
+        chunk_counter = test_then_inc<ST>((volatile ST *)&sh->u.s.factoring_counter);
+
+        // Start atomic part of calculations
+        while (1) {
+          ST remaining; // signed, because can be < 0
+
+          // early check for remaining iterations
+          init = sh->u.s.iteration; // shared value
+          remaining = trip - init;
+          if (remaining <= 0) {
+            // there are no remaining iterations, nothing to do, don't try atomic op
+            status = 0;
+            break;
+          }
+
+          // calculate batch number i (chunk_counter/nthreads)
+          UT batch_number = ( chunk_counter / pr->u.p.parm2 );
+          chunk_size = ceil( trip / ( pow( 2, batch_number + 1 ) * pr->u.p.parm2 ) );
+          // chunksize = 2;
+          limit = init + (UT)chunk_size;
+          if (compare_and_swap<ST>(RCAST(volatile ST *, &sh->u.s.iteration),
+                                   (ST)init, (ST)limit)) {
+            // CAS was successful, chunk obtained
+            status = 1;
+            break;
+          } // if
+        }
+
+        if (p_st != NULL)
+          *p_st = incr;
+        if (status != 0) {
+          *p_lb = init;
+          *p_ub = init + (UT)chunk_size - 1;
+          if ( *p_ub >= trip )
+            *p_ub = trip - 1;
+        } else {
+          *p_lb = 0;
+          *p_ub = 0;
+        } // if
+      } // case
+      break;
+
       default: {
         status = 0; // to avoid complaints on uninitialized variable use
         __kmp_fatal(KMP_MSG(UnknownSchedTypeDetected), // Primary message
@@ -2459,6 +2557,7 @@ static void __kmp_dist_get_bounds(ident_t *loc, kmp_int32 gtid,
     trip_count = (UT)(*plower - *pupper) / (-incr) + 1;
   }
 
+  /* Add new scheduling strategies: this case might be handled */
   if (trip_count <= nteams) {
     KMP_DEBUG_ASSERT(
         __kmp_static == kmp_sch_static_greedy ||

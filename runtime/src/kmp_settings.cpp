@@ -3455,6 +3455,12 @@ static void __kmp_stg_parse_omp_schedule(char const *name, char const *value,
       else if (!__kmp_strcasecmp_with_sentinel("static", value,
                                                ',')) /* STATIC */
         __kmp_sched = kmp_sch_static;
+
+      /* Handle new scheduling strategies here if they should be accessible via OMP_SCHEDULE */
+      else if (!__kmp_strcasecmp_with_sentinel("factoring", value,
+                                               ',')) /* FACTORING */
+        __kmp_sched = kmp_sch_factoring;
+
 #if KMP_STATIC_STEAL_ENABLED
       else if (!__kmp_strcasecmp_with_sentinel("static_steal", value, ','))
         __kmp_sched = kmp_sch_static_steal;

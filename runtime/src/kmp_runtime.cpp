@@ -2814,6 +2814,8 @@ void __kmp_get_schedule(int gtid, kmp_sched_t *kind, int *chunk) {
   case kmp_sch_static:
   case kmp_sch_static_greedy:
   case kmp_sch_static_balanced:
+  /* Add new scheduling strategies: DUMMY!!! - put into right place */
+  case kmp_sch_factoring:
     *kind = kmp_sched_static;
     *chunk = 0; // chunk was not set, try to show this fact via zero value
     return;
