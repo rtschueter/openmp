@@ -3534,6 +3534,9 @@ static void __kmp_stg_print_omp_schedule(kmp_str_buf_t *buffer,
     case kmp_sch_auto:
       __kmp_str_buf_print(buffer, "%s,%d'\n", "auto", __kmp_chunk);
       break;
+    case kmp_sch_factoring:
+      __kmp_str_buf_print(buffer, "%s,%d'\n", "factoring", __kmp_chunk);
+      break;
     }
   } else {
     switch (__kmp_sched) {
@@ -3558,6 +3561,9 @@ static void __kmp_stg_print_omp_schedule(kmp_str_buf_t *buffer,
       break;
     case kmp_sch_auto:
       __kmp_str_buf_print(buffer, "%s'\n", "auto");
+      break;
+    case kmp_sch_factoring:
+      __kmp_str_buf_print(buffer, "%s'\n", "factoring");
       break;
     }
   }
