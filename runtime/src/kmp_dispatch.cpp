@@ -2437,6 +2437,7 @@ static int __kmp_dispatch_next(ident_t *loc, int gtid, kmp_int32 *p_last,
 
         sh->u.s.num_done = 0;
         sh->u.s.iteration = 0;
+        sh->u.s.factoring_counter = 0;
 
         /* TODO replace with general release procedure? */
         if (pr->ordered) {
